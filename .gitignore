@@ -1,0 +1,24 @@
+# Binaries
+/bin/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Lambda build artifacts
+/lambda/**/bootstrap
+/lambda/**/*.zip
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+
+# Local env / editors
+.env
+.idea/
+.vscode/
+.DS_Store
