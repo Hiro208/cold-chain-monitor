@@ -53,6 +53,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/containers", s.createContainer)
 	mux.HandleFunc("GET /v1/containers", s.listContainers)
 	mux.HandleFunc("GET /v1/containers/{id}", s.getContainer)
+	mux.HandleFunc("GET /v1/containers/{id}/readings", s.listReadings)
 
 	return withRequestContext(s.log, recoverPanics(mux))
 }
