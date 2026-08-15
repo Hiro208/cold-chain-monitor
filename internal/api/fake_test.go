@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/guangjiandong/cold-chain-monitor/internal/cache"
 	"github.com/guangjiandong/cold-chain-monitor/internal/domain"
 	"github.com/guangjiandong/cold-chain-monitor/internal/store"
 )
@@ -83,13 +84,38 @@ func (f *fakeStore) ReadingsInRange(_ context.Context, q store.ReadingRange) ([]
 	return out, nil
 }
 
+// fakeCache is an in-memory StateCache.
+type fakeCache struct {
+	mu     sync.Mutex
+	states map[string]cache.State
+}
+
+func newFakeCache() *fakeCache { return &fakeCache{states: map[string]cache.State{}} }
+
+func (f *fakeCache) Ping(context.Context) error { return nil }
+
+func (f *fakeCache) Latest(_ context.Context, id string) (cache.State, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	st, ok := f.states[id]
+	if !ok {
+		return cache.State{}, cache.ErrMiss
+	}
+	return st, nil
+}
+
 var testNow = time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
 
 func newTestServer(t *testing.T, st Store, opts ...Option) http.Handler {
 	t.Helper()
+	return newTestServerWithCache(t, st, newFakeCache(), opts...)
+}
+
+func newTestServerWithCache(t *testing.T, st Store, sc StateCache, opts ...Option) http.Handler {
+	t.Helper()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	opts = append([]Option{WithClock(func() time.Time { return testNow })}, opts...)
-	return NewServer(st, log, opts...).Handler()
+	return NewServer(st, sc, log, opts...).Handler()
 }
 
 func do(t *testing.T, h http.Handler, method, path, body string) *httptest.ResponseRecorder {

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/guangjiandong/cold-chain-monitor/internal/api"
+	"github.com/guangjiandong/cold-chain-monitor/internal/cache"
 	"github.com/guangjiandong/cold-chain-monitor/internal/config"
 	"github.com/guangjiandong/cold-chain-monitor/internal/platform"
 	"github.com/guangjiandong/cold-chain-monitor/internal/store"
@@ -48,7 +49,13 @@ func run() error {
 		}
 	}
 
-	srv := api.NewServer(store.New(pool), log)
+	rdb, err := cache.Dial(ctx, cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
+	if err != nil {
+		return err
+	}
+	defer rdb.Close()
+
+	srv := api.NewServer(store.New(pool), cache.New(rdb, cfg.Redis.StateTTL), log)
 	httpSrv := platform.NewHTTPServer(cfg.ListenAddr, srv.Handler())
 	return platform.Serve(ctx, httpSrv, cfg.ShutdownTimeout, log)
 }

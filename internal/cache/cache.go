@@ -185,3 +185,20 @@ func (c *Cache) BreachStates(ctx context.Context, ids []string) (map[string]doma
 	}
 	return out, nil
 }
+
+// Dial connects to Redis and verifies the connection.
+func Dial(ctx context.Context, addr, password string, db int) (*redis.Client, error) {
+	rdb := redis.NewClient(&redis.Options{
+		Addr:         addr,
+		Password:     password,
+		DB:           db,
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  2 * time.Second,
+		WriteTimeout: 2 * time.Second,
+	})
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		_ = rdb.Close()
+		return nil, fmt.Errorf("ping redis: %w", err)
+	}
+	return rdb, nil
+}

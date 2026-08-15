@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/guangjiandong/cold-chain-monitor/internal/cache"
 	"github.com/guangjiandong/cold-chain-monitor/internal/domain"
 	"github.com/guangjiandong/cold-chain-monitor/internal/store"
 )
@@ -21,9 +22,16 @@ type Store interface {
 	ReadingsInRange(ctx context.Context, q store.ReadingRange) ([]domain.Reading, error)
 }
 
+// StateCache serves the latest state of a container.
+type StateCache interface {
+	Ping(ctx context.Context) error
+	Latest(ctx context.Context, id string) (cache.State, error)
+}
+
 // Server wires handlers to their dependencies.
 type Server struct {
 	store Store
+	cache StateCache
 	log   *slog.Logger
 	now   func() time.Time
 }
@@ -35,8 +43,8 @@ type Option func(*Server)
 func WithClock(now func() time.Time) Option { return func(s *Server) { s.now = now } }
 
 // NewServer constructs a Server.
-func NewServer(st Store, log *slog.Logger, opts ...Option) *Server {
-	s := &Server{store: st, log: log, now: time.Now}
+func NewServer(st Store, sc StateCache, log *slog.Logger, opts ...Option) *Server {
+	s := &Server{store: st, cache: sc, log: log, now: time.Now}
 	for _, o := range opts {
 		o(s)
 	}
@@ -54,6 +62,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/containers", s.listContainers)
 	mux.HandleFunc("GET /v1/containers/{id}", s.getContainer)
 	mux.HandleFunc("GET /v1/containers/{id}/readings", s.listReadings)
+	mux.HandleFunc("GET /v1/containers/{id}/state", s.getState)
 
 	return withRequestContext(s.log, recoverPanics(mux))
 }
@@ -70,6 +79,10 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	if err := s.store.Ping(ctx); err != nil {
 		writeError(w, r, http.StatusServiceUnavailable, "postgres unavailable")
+		return
+	}
+	if err := s.cache.Ping(ctx); err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, "redis unavailable")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
