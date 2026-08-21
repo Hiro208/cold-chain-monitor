@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -128,11 +129,48 @@ func isNoScript(err error) bool {
 
 // Latest returns the cached state of a container.
 func (c *Cache) Latest(ctx context.Context, id string) (State, error) {
-	vals, err := c.rdb.HMGet(ctx, stateKey(id), "reading", "breach", "upd").Result()
+	vals, err := c.rdb.HMGet(ctx, stateKey(id), stateFields...).Result()
 	if err != nil {
 		return State{}, err
 	}
-	if vals[0] == nil {
+	return decodeState(vals)
+}
+
+// States loads the cached state of many containers in one pipelined round
+// trip; containers with nothing cached are absent from the result. The
+// ingest worker uses it to recover detector state for containers it has not
+// seen since it started or since a partition rebalance, so a breach that was
+// open on another replica stays open here.
+func (c *Cache) States(ctx context.Context, ids []string) (map[string]State, error) {
+	out := make(map[string]State, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	pipe := c.rdb.Pipeline()
+	cmds := make([]*redis.SliceCmd, len(ids))
+	for i, id := range ids {
+		cmds[i] = pipe.HMGet(ctx, stateKey(id), stateFields...)
+	}
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
+		return nil, err
+	}
+	for i, cmd := range cmds {
+		st, err := decodeState(cmd.Val())
+		if errors.Is(err, ErrMiss) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("container %s: %w", ids[i], err)
+		}
+		out[ids[i]] = st
+	}
+	return out, nil
+}
+
+var stateFields = []string{"reading", "breach", "upd"}
+
+func decodeState(vals []any) (State, error) {
+	if len(vals) != len(stateFields) || vals[0] == nil {
 		return State{}, ErrMiss
 	}
 	var st State
@@ -145,45 +183,11 @@ func (c *Cache) Latest(ctx context.Context, id string) (State, error) {
 		}
 	}
 	if s, ok := vals[2].(string); ok {
-		var us int64
-		if _, err := fmt.Sscan(s, &us); err == nil {
+		if us, err := strconv.ParseInt(s, 10, 64); err == nil {
 			st.UpdatedAt = time.UnixMicro(us).UTC()
 		}
 	}
 	return st, nil
-}
-
-// BreachStates loads the detector state of the given containers. The ingest
-// worker calls it when it is assigned Kafka partitions, so that a breach that
-// was open before a rebalance stays open afterwards.
-func (c *Cache) BreachStates(ctx context.Context, ids []string) (map[string]domain.BreachState, error) {
-	out := make(map[string]domain.BreachState, len(ids))
-	if len(ids) == 0 {
-		return out, nil
-	}
-	pipe := c.rdb.Pipeline()
-	cmds := make([]*redis.StringCmd, len(ids))
-	for i, id := range ids {
-		cmds[i] = pipe.HGet(ctx, stateKey(id), "breach")
-	}
-	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
-		return nil, err
-	}
-	for i, cmd := range cmds {
-		s, err := cmd.Result()
-		if errors.Is(err, redis.Nil) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		var bs domain.BreachState
-		if err := json.Unmarshal([]byte(s), &bs); err != nil {
-			return nil, fmt.Errorf("decode breach state for %s: %w", ids[i], err)
-		}
-		out[ids[i]] = bs
-	}
-	return out, nil
 }
 
 // Dial connects to Redis and verifies the connection.

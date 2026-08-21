@@ -95,18 +95,18 @@ func TestScriptReloadAfterFlush(t *testing.T) {
 	}
 }
 
-func TestBreachStates(t *testing.T) {
+func TestStates(t *testing.T) {
 	ctx := context.Background()
 	c, _ := newTestCache(t)
 	bs := domain.BreachState{Open: true, Kind: domain.BreachTooCold, PeakTempC: -30}
 	if _, err := c.Upsert(ctx, []Entry{{Reading: reading("A", time.Now(), -30), Breach: bs}}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := c.BreachStates(ctx, []string{"A", "B"})
+	got, err := c.States(ctx, []string{"A", "B"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || !got["A"].Open || got["A"].Kind != domain.BreachTooCold {
-		t.Fatalf("BreachStates = %+v", got)
+	if len(got) != 1 || !got["A"].Breach.Open || got["A"].Breach.Kind != domain.BreachTooCold || got["A"].Latest.TemperatureC != -30 {
+		t.Fatalf("States = %+v", got)
 	}
 }
