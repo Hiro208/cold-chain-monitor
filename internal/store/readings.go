@@ -74,23 +74,3 @@ func (s *Store) ReadingsInRange(ctx context.Context, q ReadingRange) ([]domain.R
 		return rd, err
 	})
 }
-
-// ContainerBands loads the temperature band of every container in one query.
-// The ingest worker uses it to warm its in-memory band cache at startup.
-func (s *Store) ContainerBands(ctx context.Context, hysteresisC float64) (map[string]domain.Band, error) {
-	rows, err := s.pool.Query(ctx, "SELECT id, min_temp_c, max_temp_c FROM containers")
-	if err != nil {
-		return nil, fmt.Errorf("load bands: %w", err)
-	}
-	defer rows.Close()
-	out := make(map[string]domain.Band)
-	for rows.Next() {
-		var id string
-		b := domain.Band{HysteresisC: hysteresisC}
-		if err := rows.Scan(&id, &b.MinC, &b.MaxC); err != nil {
-			return nil, err
-		}
-		out[id] = b
-	}
-	return out, rows.Err()
-}
