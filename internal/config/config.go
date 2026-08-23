@@ -30,7 +30,11 @@ type Kafka struct {
 	Brokers       []string
 	ReadingsTopic string
 	BreachesTopic string
+	DLQTopic      string
 	ConsumerGroup string
+	// Partitions is used only when the service creates missing topics
+	// (local/dev); in AWS the topics are provisioned by Terraform.
+	Partitions int32
 }
 
 // str reads an environment variable, falling back to def when unset or empty.
@@ -130,7 +134,9 @@ func loadKafka(l *loader, defaultGroup string) Kafka {
 		Brokers:       list("KAFKA_BROKERS", "localhost:9092"),
 		ReadingsTopic: str("KAFKA_READINGS_TOPIC", "reefer.readings.v1"),
 		BreachesTopic: str("KAFKA_BREACHES_TOPIC", "reefer.breaches.v1"),
+		DLQTopic:      str("KAFKA_DLQ_TOPIC", "reefer.readings.dlq.v1"),
 		ConsumerGroup: str("KAFKA_CONSUMER_GROUP", defaultGroup),
+		Partitions:    int32(l.int("KAFKA_PARTITIONS", 12)),
 	}
 }
 

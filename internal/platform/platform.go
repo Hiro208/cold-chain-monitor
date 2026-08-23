@@ -39,6 +39,9 @@ func SignalContext() (context.Context, context.CancelFunc) {
 	return signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 }
 
+// DefaultShutdownTimeout is used by servers without their own setting.
+const DefaultShutdownTimeout = 10 * time.Second
+
 // Serve runs srv until ctx is cancelled, then shuts it down gracefully,
 // giving in-flight requests up to shutdownTimeout to finish.
 func Serve(ctx context.Context, srv *http.Server, shutdownTimeout time.Duration, log *slog.Logger) error {
