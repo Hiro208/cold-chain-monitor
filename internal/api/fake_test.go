@@ -23,6 +23,7 @@ type fakeStore struct {
 	mu         sync.Mutex
 	containers map[string]domain.Container
 	readings   []domain.Reading
+	breaches   []domain.Breach
 }
 
 func newFakeStore() *fakeStore {
@@ -80,6 +81,25 @@ func (f *fakeStore) ReadingsInRange(_ context.Context, q store.ReadingRange) ([]
 	sort.Slice(out, func(i, j int) bool { return out[i].RecordedAt.Before(out[j].RecordedAt) })
 	if len(out) > q.Limit {
 		out = out[:q.Limit]
+	}
+	return out, nil
+}
+
+func (f *fakeStore) ListBreaches(_ context.Context, flt store.BreachFilter) ([]domain.Breach, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []domain.Breach
+	for i := len(f.breaches) - 1; i >= 0; i-- { // newest (highest id) first
+		b := f.breaches[i]
+		if (flt.ContainerID == "" || b.ContainerID == flt.ContainerID) &&
+			(!flt.OpenOnly || b.EndedAt == nil) &&
+			!b.StartedAt.Before(flt.Since) &&
+			(flt.BeforeID == 0 || b.ID < flt.BeforeID) {
+			out = append(out, b)
+		}
+	}
+	if len(out) > flt.Limit {
+		out = out[:flt.Limit]
 	}
 	return out, nil
 }

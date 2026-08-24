@@ -20,6 +20,7 @@ type Store interface {
 	GetContainer(ctx context.Context, id string) (domain.Container, error)
 	ListContainers(ctx context.Context, f store.ContainerFilter) ([]domain.Container, error)
 	ReadingsInRange(ctx context.Context, q store.ReadingRange) ([]domain.Reading, error)
+	ListBreaches(ctx context.Context, f store.BreachFilter) ([]domain.Breach, error)
 }
 
 // StateCache serves the latest state of a container.
@@ -63,6 +64,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/containers/{id}", s.getContainer)
 	mux.HandleFunc("GET /v1/containers/{id}/readings", s.listReadings)
 	mux.HandleFunc("GET /v1/containers/{id}/state", s.getState)
+	mux.HandleFunc("GET /v1/containers/{id}/breaches", s.listContainerBreaches)
+	mux.HandleFunc("GET /v1/breaches", s.listBreaches)
 
 	return withRequestContext(s.log, recoverPanics(mux))
 }
