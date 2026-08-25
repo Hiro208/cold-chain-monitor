@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/guangjiandong/cold-chain-monitor/internal/api"
 	"github.com/guangjiandong/cold-chain-monitor/internal/cache"
 	"github.com/guangjiandong/cold-chain-monitor/internal/config"
@@ -55,7 +57,15 @@ func run() error {
 	}
 	defer rdb.Close()
 
-	srv := api.NewServer(store.New(pool), cache.New(rdb, cfg.Redis.StateTTL), log)
-	httpSrv := platform.NewHTTPServer(cfg.ListenAddr, srv.Handler())
-	return platform.Serve(ctx, httpSrv, cfg.ShutdownTimeout, log)
+	reg := platform.NewMetricsRegistry()
+	srv := api.NewServer(store.New(pool), cache.New(rdb, cfg.Redis.StateTTL), log, api.WithMetrics(reg))
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return platform.Serve(ctx, platform.NewHTTPServer(cfg.ListenAddr, srv.Handler()), cfg.ShutdownTimeout, log)
+	})
+	g.Go(func() error {
+		return platform.Serve(ctx, platform.NewHTTPServer(cfg.MetricsAddr, platform.MetricsHandler(reg)), platform.DefaultShutdownTimeout, log)
+	})
+	return g.Wait()
 }

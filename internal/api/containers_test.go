@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/guangjiandong/cold-chain-monitor/internal/domain"
 )
 
@@ -101,4 +103,41 @@ func TestListContainersPagination(t *testing.T) {
 	if rec := do(t, h, http.MethodGet, "/v1/containers?limit=0", ""); rec.Code != http.StatusBadRequest {
 		t.Fatalf("limit=0: status %d", rec.Code)
 	}
+}
+
+func TestMetricsUseRoutePattern(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	h := newTestServer(t, newFakeStore(), WithMetrics(reg))
+	do(t, h, http.MethodGet, "/v1/containers/ABCU0000001", "")
+	do(t, h, http.MethodGet, "/v1/containers/ABCU0000002", "")
+	do(t, h, http.MethodGet, "/nope", "")
+
+	got := requestCount(t, reg, "GET /v1/containers/{id}", "404")
+	if got != 2 {
+		t.Fatalf("requests for route pattern = %v, want 2", got)
+	}
+}
+
+func requestCount(t *testing.T, reg *prometheus.Registry, route, code string) float64 {
+	t.Helper()
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mf := range mfs {
+		if mf.GetName() != "coldchain_api_http_requests_total" {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			labels := map[string]string{}
+			for _, lp := range m.GetLabel() {
+				labels[lp.GetName()] = lp.GetValue()
+			}
+			if labels["route"] == route && labels["code"] == code {
+				return m.GetCounter().GetValue()
+			}
+		}
+	}
+	t.Fatalf("no sample for route=%q code=%q", route, code)
+	return 0
 }

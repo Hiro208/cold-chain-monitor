@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/guangjiandong/cold-chain-monitor/internal/cache"
 	"github.com/guangjiandong/cold-chain-monitor/internal/domain"
 	"github.com/guangjiandong/cold-chain-monitor/internal/store"
@@ -35,17 +37,21 @@ type Server struct {
 	cache StateCache
 	log   *slog.Logger
 	now   func() time.Time
+	reg   prometheus.Registerer
 }
 
 // Option customises a Server.
 type Option func(*Server)
+
+// WithMetrics registers HTTP metrics on reg.
+func WithMetrics(reg prometheus.Registerer) Option { return func(s *Server) { s.reg = reg } }
 
 // WithClock overrides the clock (tests).
 func WithClock(now func() time.Time) Option { return func(s *Server) { s.now = now } }
 
 // NewServer constructs a Server.
 func NewServer(st Store, sc StateCache, log *slog.Logger, opts ...Option) *Server {
-	s := &Server{store: st, cache: sc, log: log, now: time.Now}
+	s := &Server{store: st, cache: sc, log: log, now: time.Now, reg: prometheus.NewRegistry()}
 	for _, o := range opts {
 		o(s)
 	}
@@ -67,7 +73,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/containers/{id}/breaches", s.listContainerBreaches)
 	mux.HandleFunc("GET /v1/breaches", s.listBreaches)
 
-	return withRequestContext(s.log, recoverPanics(mux))
+	return withRequestContext(s.log, recoverPanics(newHTTPMetrics(s.reg).instrument(mux)))
 }
 
 func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
