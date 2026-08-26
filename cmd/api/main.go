@@ -13,6 +13,7 @@ import (
 	"github.com/guangjiandong/cold-chain-monitor/internal/config"
 	"github.com/guangjiandong/cold-chain-monitor/internal/platform"
 	"github.com/guangjiandong/cold-chain-monitor/internal/store"
+	"github.com/guangjiandong/cold-chain-monitor/internal/webhook"
 )
 
 func main() {
@@ -58,7 +59,18 @@ func run() error {
 	defer rdb.Close()
 
 	reg := platform.NewMetricsRegistry()
-	srv := api.NewServer(store.New(pool), cache.New(rdb, cfg.Redis.StateTTL), log, api.WithMetrics(reg))
+	st := store.New(pool)
+	opts := []api.Option{api.WithMetrics(reg)}
+	if cfg.WebhookSecretKey != "" {
+		sealer, err := webhook.NewSealer(cfg.WebhookSecretKey)
+		if err != nil {
+			return fmt.Errorf("webhook sealer: %w", err)
+		}
+		opts = append(opts, api.WithWebhooks(st, sealer, cfg.AllowInsecureWebhooks))
+	} else {
+		log.Warn("WEBHOOK_SECRET_KEY not set; partner webhook endpoints disabled")
+	}
+	srv := api.NewServer(st, cache.New(rdb, cfg.Redis.StateTTL), log, opts...)
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {

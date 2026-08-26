@@ -42,6 +42,8 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, r, http.StatusNotFound, "not found")
 	case errors.Is(err, store.ErrConflict):
 		writeError(w, r, http.StatusConflict, "already exists")
+	case errors.Is(err, store.ErrForbidden):
+		writeError(w, r, http.StatusForbidden, "forbidden")
 	default:
 		loggerFrom(r.Context()).Error("request failed", "err", err)
 		writeError(w, r, http.StatusInternalServerError, "internal error")

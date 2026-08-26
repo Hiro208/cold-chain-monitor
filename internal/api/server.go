@@ -38,6 +38,10 @@ type Server struct {
 	log   *slog.Logger
 	now   func() time.Time
 	reg   prometheus.Registerer
+
+	webhooks              WebhookStore
+	sealer                Sealer
+	allowInsecureWebhooks bool
 }
 
 // Option customises a Server.
@@ -72,6 +76,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/containers/{id}/state", s.getState)
 	mux.HandleFunc("GET /v1/containers/{id}/breaches", s.listContainerBreaches)
 	mux.HandleFunc("GET /v1/breaches", s.listBreaches)
+
+	if s.webhooks != nil {
+		mux.HandleFunc("POST /v1/webhooks", s.createWebhook)
+		mux.HandleFunc("GET /v1/webhooks", s.listWebhooks)
+		mux.HandleFunc("DELETE /v1/webhooks/{id}", s.deleteWebhook)
+	}
 
 	return withRequestContext(s.log, recoverPanics(newHTTPMetrics(s.reg).instrument(mux)))
 }

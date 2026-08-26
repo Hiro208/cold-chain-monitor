@@ -149,18 +149,21 @@ type API struct {
 	Redis           Redis
 	// WebhookSecretKey encrypts partner webhook signing secrets at rest.
 	WebhookSecretKey string
+	// AllowInsecureWebhooks permits http:// webhook URLs (local dev only).
+	AllowInsecureWebhooks bool
 }
 
 // LoadAPI loads the API configuration.
 func LoadAPI() (API, error) {
 	l := &loader{}
 	c := API{
-		ListenAddr:       str("HTTP_ADDR", ":8080"),
-		MetricsAddr:      str("METRICS_ADDR", ":9090"),
-		ShutdownTimeout:  l.duration("SHUTDOWN_TIMEOUT", 15*time.Second),
-		Postgres:         loadPostgres(l),
-		Redis:            loadRedis(l),
-		WebhookSecretKey: str("WEBHOOK_SECRET_KEY", ""),
+		ListenAddr:            str("HTTP_ADDR", ":8080"),
+		MetricsAddr:           str("METRICS_ADDR", ":9090"),
+		ShutdownTimeout:       l.duration("SHUTDOWN_TIMEOUT", 15*time.Second),
+		Postgres:              loadPostgres(l),
+		Redis:                 loadRedis(l),
+		WebhookSecretKey:      str("WEBHOOK_SECRET_KEY", ""),
+		AllowInsecureWebhooks: str("WEBHOOK_ALLOW_INSECURE", "") == "true",
 	}
 	return c, l.err()
 }
