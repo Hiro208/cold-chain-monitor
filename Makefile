@@ -29,3 +29,10 @@ tidy:
 
 clean:
 	rm -rf $(BIN_DIR)
+
+# Build the alert Lambda for the provided.al2023 arm64 (Graviton) runtime.
+.PHONY: lambda
+lambda:
+	cd lambda/breachalert && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+		$(GO) build -tags lambda.norpc -trimpath -ldflags='-s -w' -o bootstrap . && \
+		zip -q breachalert.zip bootstrap
