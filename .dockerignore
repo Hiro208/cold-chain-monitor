@@ -1,0 +1,8 @@
+.git
+bin
+deploy
+docs
+lambda/**/bootstrap
+lambda/**/*.zip
+**/*_test.go
+*.md

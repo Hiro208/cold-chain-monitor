@@ -2,7 +2,7 @@ GO        ?= go
 BIN_DIR   := bin
 PKGS      := ./...
 
-.PHONY: all build test test-integration lint fmt tidy clean
+.PHONY: all build test test-integration lint fmt tidy clean up down logs
 
 all: lint test build
 
@@ -36,3 +36,13 @@ lambda:
 	cd lambda/breachalert && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
 		$(GO) build -tags lambda.norpc -trimpath -ldflags='-s -w' -o bootstrap . && \
 		zip -q breachalert.zip bootstrap
+
+# Local stack (requires Docker).
+up:
+	docker compose up -d --build
+
+down:
+	docker compose down -v
+
+logs:
+	docker compose logs -f ingest api
