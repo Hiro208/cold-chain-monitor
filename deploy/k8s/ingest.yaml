@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coldchain-ingest
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: coldchain-ingest }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: coldchain-ingest }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      serviceAccountName: coldchain-ingest
+      # Long enough to finish the in-flight batch and commit offsets.
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: ingest
+          image: coldchain/ingest
+          ports:
+            - { name: metrics, containerPort: 9090 }
+          envFrom:
+            - configMapRef: { name: coldchain-config }
+            - secretRef: { name: coldchain-secrets }
+          env:
+            - { name: KAFKA_CONSUMER_GROUP, value: reefer-ingest }
+          livenessProbe:
+            httpGet: { path: /healthz, port: metrics }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 250m, memory: 128Mi }
+            limits: { memory: 384Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+# Scaling past the partition count adds idle consumers, so maxReplicas is
+# capped at the number of partitions on reefer.readings.v1 (12).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: coldchain-ingest
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: coldchain-ingest }
+  minReplicas: 2
+  maxReplicas: 12
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 60 }
+  behavior:
+    # Each scale event triggers a consumer-group rebalance; damp churn.
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies: [{ type: Pods, value: 2, periodSeconds: 60 }]
+    scaleDown:
+      stabilizationWindowSeconds: 600
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: coldchain-ingest
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: coldchain-ingest }

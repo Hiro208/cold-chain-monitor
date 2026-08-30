@@ -1,0 +1,33 @@
+# Runs schema migrations once per release, before the Deployments roll.
+# Argo CD / the CI deploy step waits for completion (sync-wave -1).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: coldchain-migrate
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: coldchain-api
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrate
+          image: coldchain/api
+          args: ["-migrate-only"]
+          envFrom:
+            - configMapRef: { name: coldchain-config }
+            - secretRef: { name: coldchain-secrets }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 128Mi }
