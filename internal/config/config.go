@@ -27,7 +27,9 @@ type Redis struct {
 
 // Kafka holds broker and topic settings.
 type Kafka struct {
-	Brokers       []string
+	Brokers []string
+	// TLS enables TLS to the brokers (Amazon MSK listener on 9094).
+	TLS           bool
 	ReadingsTopic string
 	BreachesTopic string
 	DLQTopic      string
@@ -132,6 +134,7 @@ func loadRedis(l *loader) Redis {
 func loadKafka(l *loader, defaultGroup string) Kafka {
 	return Kafka{
 		Brokers:       list("KAFKA_BROKERS", "localhost:9092"),
+		TLS:           str("KAFKA_TLS", "") == "true",
 		ReadingsTopic: str("KAFKA_READINGS_TOPIC", "reefer.readings.v1"),
 		BreachesTopic: str("KAFKA_BREACHES_TOPIC", "reefer.breaches.v1"),
 		DLQTopic:      str("KAFKA_DLQ_TOPIC", "reefer.readings.dlq.v1"),

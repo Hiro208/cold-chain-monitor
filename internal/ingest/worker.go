@@ -16,7 +16,7 @@ import (
 
 // WorkerConfig configures the Kafka consumer loop.
 type WorkerConfig struct {
-	Brokers       []string
+	Conn          []kgo.Opt
 	Group         string
 	ReadingsTopic string
 	BreachesTopic string
@@ -50,8 +50,7 @@ type Worker struct {
 // usually the Worker itself (see PublishBreachEvents).
 func NewWorker(cfg WorkerConfig, log *slog.Logger, m *Metrics) (*Worker, error) {
 	w := &Worker{cfg: cfg, log: log, m: m, partitionOf: map[string]int32{}, revoked: map[int32]bool{}}
-	cl, err := kgo.NewClient(
-		kgo.SeedBrokers(cfg.Brokers...),
+	opts := append(append([]kgo.Opt{}, cfg.Conn...),
 		kgo.ConsumerGroup(cfg.Group),
 		kgo.ConsumeTopics(cfg.ReadingsTopic),
 		kgo.DisableAutoCommit(),
@@ -66,6 +65,7 @@ func NewWorker(cfg WorkerConfig, log *slog.Logger, m *Metrics) (*Worker, error) 
 		kgo.RequiredAcks(kgo.AllISRAcks()),
 		kgo.ProducerLinger(0),
 	)
+	cl, err := kgo.NewClient(opts...)
 	if err != nil {
 		return nil, err
 	}

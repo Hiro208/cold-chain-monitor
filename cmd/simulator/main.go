@@ -51,7 +51,7 @@ func run() error {
 		}
 	}
 
-	cl, err := stream.NewProducer(cfg.Kafka.Brokers, kgo.DefaultProduceTopic(cfg.Kafka.ReadingsTopic))
+	cl, err := stream.NewProducer(stream.Conn(cfg.Kafka.Brokers, cfg.Kafka.TLS), kgo.DefaultProduceTopic(cfg.Kafka.ReadingsTopic))
 	if err != nil {
 		return err
 	}

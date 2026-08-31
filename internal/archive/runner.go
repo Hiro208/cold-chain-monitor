@@ -50,10 +50,9 @@ type Runner struct {
 
 // NewRunner creates the consumer. Uses its own consumer group so archiving
 // progresses independently of (and never slows down) breach detection.
-func NewRunner(brokers []string, group, topic string, b *Batcher, up Uploader, flushEvery time.Duration, log *slog.Logger) (*Runner, error) {
+func NewRunner(conn []kgo.Opt, group, topic string, b *Batcher, up Uploader, flushEvery time.Duration, log *slog.Logger) (*Runner, error) {
 	r := &Runner{batcher: b, up: up, flushEvery: flushEvery, log: log, topic: topic}
-	cl, err := kgo.NewClient(
-		kgo.SeedBrokers(brokers...),
+	opts := append(append([]kgo.Opt{}, conn...),
 		kgo.ConsumerGroup(group),
 		kgo.ConsumeTopics(topic),
 		kgo.DisableAutoCommit(),
@@ -63,6 +62,7 @@ func NewRunner(brokers []string, group, topic string, b *Batcher, up Uploader, f
 		kgo.OnPartitionsRevoked(r.onRevoked),
 		kgo.OnPartitionsLost(r.onRevoked),
 	)
+	cl, err := kgo.NewClient(opts...)
 	if err != nil {
 		return nil, err
 	}

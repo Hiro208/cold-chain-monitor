@@ -12,6 +12,7 @@ import (
 	"github.com/guangjiandong/cold-chain-monitor/internal/archive"
 	"github.com/guangjiandong/cold-chain-monitor/internal/config"
 	"github.com/guangjiandong/cold-chain-monitor/internal/platform"
+	"github.com/guangjiandong/cold-chain-monitor/internal/stream"
 )
 
 func main() {
@@ -39,7 +40,7 @@ func run() error {
 	}
 	s3c := s3.NewFromConfig(awsCfg, func(o *s3.Options) { o.UsePathStyle = os.Getenv("S3_FORCE_PATH_STYLE") == "true" })
 
-	runner, err := archive.NewRunner(cfg.Kafka.Brokers, cfg.Kafka.ConsumerGroup, cfg.Kafka.ReadingsTopic,
+	runner, err := archive.NewRunner(stream.Conn(cfg.Kafka.Brokers, cfg.Kafka.TLS), cfg.Kafka.ConsumerGroup, cfg.Kafka.ReadingsTopic,
 		archive.NewBatcher(cfg.Prefix, cfg.MaxObjectRows),
 		archive.S3Uploader{Client: s3c, Bucket: cfg.Bucket},
 		cfg.FlushEvery, log)

@@ -49,7 +49,7 @@ func run() error {
 	metrics := ingest.NewMetrics(reg)
 
 	worker, err := ingest.NewWorker(ingest.WorkerConfig{
-		Brokers:       cfg.Kafka.Brokers,
+		Conn:          stream.Conn(cfg.Kafka.Brokers, cfg.Kafka.TLS),
 		Group:         cfg.Kafka.ConsumerGroup,
 		ReadingsTopic: cfg.Kafka.ReadingsTopic,
 		BreachesTopic: cfg.Kafka.BreachesTopic,

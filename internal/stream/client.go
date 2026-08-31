@@ -2,6 +2,7 @@ package stream
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"time"
@@ -11,17 +12,27 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+// Conn returns the connection options shared by every client: seed brokers
+// and, for Amazon MSK, TLS with the system trust store.
+func Conn(brokers []string, useTLS bool) []kgo.Opt {
+	opts := []kgo.Opt{kgo.SeedBrokers(brokers...)}
+	if useTLS {
+		opts = append(opts, kgo.DialTLSConfig(&tls.Config{MinVersion: tls.VersionTLS12}))
+	}
+	return opts
+}
+
 // NewProducer returns a client tuned for throughput with safety: idempotent
 // writes (the franz-go default), acks from all in-sync replicas, and a short
 // linger so readings are batched without hurting breach-detection latency.
-func NewProducer(brokers []string, extra ...kgo.Opt) (*kgo.Client, error) {
-	opts := append([]kgo.Opt{
-		kgo.SeedBrokers(brokers...),
+func NewProducer(conn []kgo.Opt, extra ...kgo.Opt) (*kgo.Client, error) {
+	opts := append(append([]kgo.Opt{}, conn...),
 		kgo.RequiredAcks(kgo.AllISRAcks()),
-		kgo.ProducerLinger(5 * time.Millisecond),
+		kgo.ProducerLinger(5*time.Millisecond),
 		kgo.ProducerBatchCompression(kgo.ZstdCompression(), kgo.SnappyCompression()),
 		kgo.RecordPartitioner(kgo.StickyKeyPartitioner(nil)), // murmur2, Java-compatible
-	}, extra...)
+	)
+	opts = append(opts, extra...)
 	return kgo.NewClient(opts...)
 }
 
