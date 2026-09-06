@@ -15,7 +15,6 @@ coverage.*
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
-.terraform.lock.hcl
 
 # Local env / editors
 .env
