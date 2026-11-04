@@ -1,5 +1,7 @@
 # Cold-Chain Container Monitoring Service
 
+[![ci](https://github.com/Hiro208/cold-chain-monitor/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Hiro208/cold-chain-monitor/actions/workflows/ci.yml)
+
 Developed with assistance from Claude Code.
 
 Backend for tracking refrigerated shipping containers ("reefers"). It ingests
