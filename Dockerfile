@@ -4,7 +4,7 @@
 #   docker build --build-arg SERVICE=api    -t coldchain/api .
 #   docker build --build-arg SERVICE=ingest -t coldchain/ingest .
 
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
 ARG SERVICE
 ARG TARGETOS
 ARG TARGETARCH
