@@ -50,7 +50,7 @@ module "lb_controller_irsa" {
   source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   # Pinned exactly: v6 renamed this submodule, and constraint resolution for
   # registry submodules has picked up 6.x in CI.
-  version = "5.60.0"
+  version = "6.8.2"
 
   role_name                              = "${local.name}-aws-lb-controller"
   attach_load_balancer_controller_policy = true
