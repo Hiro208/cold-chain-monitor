@@ -2,6 +2,8 @@ module github.com/guangjiandong/cold-chain-monitor
 
 go 1.26.0
 
+toolchain go1.26.10
+
 require (
 	github.com/alicebob/miniredis/v2 v2.40.0
 	github.com/aws/aws-lambda-go v1.55.1

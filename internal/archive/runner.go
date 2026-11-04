@@ -78,7 +78,12 @@ func (r *Runner) onRevoked(_ context.Context, _ *kgo.Client, lost map[string][]i
 
 // Run consumes until ctx is cancelled, then flushes what it has.
 func (r *Runner) Run(ctx context.Context) error {
-	defer r.cl.Close()
+	// BlockRebalanceOnPoll makes Close wait for a rebalance that only
+	// AllowRebalance can release, so allow it first or shutdown hangs.
+	defer func() {
+		r.cl.AllowRebalance()
+		r.cl.Close()
+	}()
 	ticker := time.NewTicker(r.flushEvery)
 	defer ticker.Stop()
 

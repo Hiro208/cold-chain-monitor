@@ -114,7 +114,12 @@ func (w *Worker) applyRevocations() {
 // backoff without committing, so no reading is lost if Postgres or Redis
 // blips.
 func (w *Worker) Run(ctx context.Context) error {
-	defer w.cl.Close()
+	// BlockRebalanceOnPoll makes Close wait for a rebalance that only
+	// AllowRebalance can release, so allow it first or shutdown hangs.
+	defer func() {
+		w.cl.AllowRebalance()
+		w.cl.Close()
+	}()
 	for {
 		fetches := w.cl.PollRecords(ctx, w.cfg.BatchSize)
 		if fetches.IsClientClosed() || ctx.Err() != nil {
