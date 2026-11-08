@@ -100,12 +100,14 @@ func Kafka(t *testing.T) []string {
 	return brokers
 }
 
-// Mongo starts a single-node MongoDB 8 replica set (so majority writes
-// behave as in production) and returns its connection string.
+// Mongo starts a single-node MongoDB 7.0 replica set (so majority writes
+// behave as in production) and returns its connection string. MongoDB 8.x
+// refuses to start on Linux 6.19+ kernels (SERVER-121912), as on current CI
+// runners, so tests pin 7.0.
 func Mongo(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
-	c, err := tcmongo.Run(ctx, "mongo:8.0", tcmongo.WithReplicaSet("rs0"))
+	c, err := tcmongo.Run(ctx, "mongo:7.0", tcmongo.WithReplicaSet("rs0"))
 	testcontainers.CleanupContainer(t, c)
 	if err != nil {
 		t.Fatalf("start mongo: %v", err)
