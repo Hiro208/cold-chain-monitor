@@ -25,6 +25,23 @@ type Redis struct {
 	StateTTL time.Duration
 }
 
+// Mongo holds settings for the MongoDB incident log.
+type Mongo struct {
+	URI      string
+	Database string
+	// Retention is how long a closed incident is kept before the TTL index
+	// removes it. Zero keeps incidents forever.
+	Retention time.Duration
+}
+
+func loadMongo(l *loader, uri string) Mongo {
+	return Mongo{
+		URI:       uri,
+		Database:  str("MONGODB_DATABASE", "coldchain"),
+		Retention: l.duration("INCIDENT_RETENTION", 90*24*time.Hour),
+	}
+}
+
 // Kafka holds broker and topic settings.
 type Kafka struct {
 	Brokers []string
@@ -154,6 +171,8 @@ type API struct {
 	WebhookSecretKey string
 	// AllowInsecureWebhooks permits http:// webhook URLs (local dev only).
 	AllowInsecureWebhooks bool
+	// Mongo enables the /v1/incidents endpoints when Mongo.URI is set.
+	Mongo Mongo
 }
 
 // LoadAPI loads the API configuration.
@@ -167,6 +186,7 @@ func LoadAPI() (API, error) {
 		Redis:                 loadRedis(l),
 		WebhookSecretKey:      str("WEBHOOK_SECRET_KEY", ""),
 		AllowInsecureWebhooks: str("WEBHOOK_ALLOW_INSECURE", "") == "true",
+		Mongo:                 loadMongo(l, str("MONGODB_URI", "")),
 	}
 	return c, l.err()
 }
@@ -198,6 +218,32 @@ func LoadIngest() (Ingest, error) {
 	}
 	if c.BatchSize <= 0 {
 		l.errs = append(l.errs, "INGEST_BATCH_SIZE: must be positive")
+	}
+	return c, l.err()
+}
+
+// Incidents is the configuration of the MongoDB incident-log consumer.
+type Incidents struct {
+	MetricsAddr string
+	Kafka       Kafka
+	Mongo       Mongo
+	BatchSize   int
+}
+
+// LoadIncidents loads the incident consumer configuration.
+func LoadIncidents() (Incidents, error) {
+	l := &loader{}
+	c := Incidents{
+		MetricsAddr: str("METRICS_ADDR", ":9090"),
+		Kafka:       loadKafka(l, "reefer-incidents"),
+		Mongo:       loadMongo(l, l.required("MONGODB_URI")),
+		BatchSize:   l.int("INCIDENT_BATCH_SIZE", 500),
+	}
+	if c.BatchSize <= 0 {
+		l.errs = append(l.errs, "INCIDENT_BATCH_SIZE: must be positive")
+	}
+	if c.Mongo.Retention < 0 {
+		l.errs = append(l.errs, "INCIDENT_RETENTION: must not be negative")
 	}
 	return c, l.err()
 }

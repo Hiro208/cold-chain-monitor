@@ -1,6 +1,7 @@
-# Full local stack: Postgres, Redis, Kafka (KRaft), an S3 mock,
-# Prometheus, and the four services. `make up` then watch:
+# Full local stack: Postgres, Redis, Kafka (KRaft), MongoDB, an S3 mock,
+# Prometheus, and the five services. `make up` then watch:
 #   curl localhost:8080/v1/breaches?open=true
+#   curl localhost:8080/v1/incidents/summary?by=commodity
 #   open http://localhost:9091  (Prometheus)
 
 x-service-env: &service-env
@@ -52,6 +53,17 @@ services:
       interval: 5s
       retries: 30
 
+  # Single-node replica set so majority write concern behaves as in prod.
+  mongo:
+    image: mongo:7.0
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports: ["27017:27017"]
+    healthcheck:
+      # Initiates the replica set on first run; healthy once it is primary.
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'try { rs.status() } catch (e) { rs.initiate({_id: \"rs0\", members: [{_id: 0, host: \"mongo:27017\"}]}) } quit(db.hello().isWritablePrimary ? 0 : 1)'"]
+      interval: 3s
+      retries: 30
+
   # S3-compatible mock standing in for Amazon S3 locally.
   s3:
     image: adobe/s3mock:4.4.0
@@ -75,9 +87,11 @@ services:
       # Local-only key; in AWS this comes from Secrets Manager.
       WEBHOOK_SECRET_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       WEBHOOK_ALLOW_INSECURE: "true"
+      MONGODB_URI: mongodb://mongo:27017/?replicaSet=rs0
     ports: ["8080:8080"]
     depends_on:
       migrate: { condition: service_completed_successfully }
+      mongo: { condition: service_healthy }
 
   ingest:
     build: { context: ., args: { SERVICE: ingest } }
@@ -86,6 +100,17 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
       kafka: { condition: service_healthy }
+
+  incidents:
+    build: { context: ., args: { SERVICE: incidents } }
+    image: coldchain/incidents:dev
+    environment:
+      <<: *service-env
+      MONGODB_URI: mongodb://mongo:27017/?replicaSet=rs0
+    depends_on:
+      kafka: { condition: service_healthy }
+      mongo: { condition: service_healthy }
+      ingest: { condition: service_started }
 
   archiver:
     build: { context: ., args: { SERVICE: archiver } }

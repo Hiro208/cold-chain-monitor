@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/guangjiandong/cold-chain-monitor/internal/api"
 	"github.com/guangjiandong/cold-chain-monitor/internal/cache"
 	"github.com/guangjiandong/cold-chain-monitor/internal/config"
+	"github.com/guangjiandong/cold-chain-monitor/internal/incident"
 	"github.com/guangjiandong/cold-chain-monitor/internal/platform"
 	"github.com/guangjiandong/cold-chain-monitor/internal/store"
 	"github.com/guangjiandong/cold-chain-monitor/internal/webhook"
@@ -69,6 +71,16 @@ func run() error {
 		opts = append(opts, api.WithWebhooks(st, sealer, cfg.AllowInsecureWebhooks))
 	} else {
 		log.Warn("WEBHOOK_SECRET_KEY not set; partner webhook endpoints disabled")
+	}
+	if cfg.Mongo.URI != "" {
+		mc, err := incident.Connect(ctx, cfg.Mongo.URI)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = mc.Disconnect(context.Background()) }()
+		opts = append(opts, api.WithIncidents(incident.NewStore(mc.Database(cfg.Mongo.Database), cfg.Mongo.Retention)))
+	} else {
+		log.Info("MONGODB_URI not set; incident endpoints disabled")
 	}
 	srv := api.NewServer(st, cache.New(rdb, cfg.Redis.StateTTL), log, opts...)
 

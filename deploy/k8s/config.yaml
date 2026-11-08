@@ -12,12 +12,14 @@ data:
   REDIS_STATE_TTL: 24h
   ARCHIVE_PREFIX: raw/readings
   ARCHIVE_FLUSH_EVERY: 1m
+  MONGODB_DATABASE: coldchain
+  INCIDENT_RETENTION: 2160h
   LOG_FORMAT: json
 ---
 # Populated by External Secrets Operator from AWS Secrets Manager
 # (coldchain/<env>/runtime); never committed with real values. Expected keys:
 #   DATABASE_URL, REDIS_ADDR, REDIS_PASSWORD, KAFKA_BROKERS,
-#   WEBHOOK_SECRET_KEY, ARCHIVE_BUCKET
+#   WEBHOOK_SECRET_KEY, ARCHIVE_BUCKET, MONGODB_URI (MongoDB Atlas, TLS)
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
