@@ -41,7 +41,7 @@ jobs:
         run: go tool cover -func=coverage.out | tail -1
 
   integration:
-    # Spins up real Kafka and Postgres (and Redis) containers through
+    # Spins up real Kafka, Postgres, Redis and MongoDB containers through
     # testcontainers-go on the runner's Docker daemon.
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -51,7 +51,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Integration tests
-        run: go test -race -count=1 -tags=integration -timeout=15m -v ./internal/store/... ./internal/e2e/...
+        run: go test -race -count=1 -tags=integration -timeout=15m -v ./internal/store/... ./internal/incident/... ./internal/e2e/...
 
   terraform:
     runs-on: ubuntu-latest
@@ -78,7 +78,7 @@ jobs:
     needs: [lint, unit]
     strategy:
       matrix:
-        service: [api, ingest, archiver, simulator]
+        service: [api, ingest, archiver, incidents, simulator]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3

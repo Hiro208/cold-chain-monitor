@@ -39,6 +39,8 @@ type Server struct {
 	now   func() time.Time
 	reg   prometheus.Registerer
 
+	incidents IncidentStore
+
 	webhooks              WebhookStore
 	sealer                Sealer
 	allowInsecureWebhooks bool
@@ -76,6 +78,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/containers/{id}/state", s.getState)
 	mux.HandleFunc("GET /v1/containers/{id}/breaches", s.listContainerBreaches)
 	mux.HandleFunc("GET /v1/breaches", s.listBreaches)
+
+	if s.incidents != nil {
+		mux.HandleFunc("GET /v1/incidents", s.listIncidents)
+		mux.HandleFunc("GET /v1/incidents/summary", s.summarizeIncidents)
+		mux.HandleFunc("GET /v1/incidents/{id}", s.getIncident)
+	}
 
 	if s.webhooks != nil {
 		mux.HandleFunc("POST /v1/webhooks", s.createWebhook)

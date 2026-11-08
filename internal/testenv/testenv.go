@@ -1,6 +1,6 @@
 //go:build integration
 
-// Package testenv starts throwaway Postgres, Redis and Kafka containers for
+// Package testenv starts throwaway Postgres, Redis, Kafka and MongoDB containers for
 // integration tests via testcontainers-go. Requires a Docker daemon.
 package testenv
 
@@ -14,6 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/testcontainers/testcontainers-go"
 	tckafka "github.com/testcontainers/testcontainers-go/modules/kafka"
+	tcmongo "github.com/testcontainers/testcontainers-go/modules/mongodb"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
@@ -97,4 +98,21 @@ func Kafka(t *testing.T) []string {
 		t.Fatal(err)
 	}
 	return brokers
+}
+
+// Mongo starts a single-node MongoDB 8 replica set (so majority writes
+// behave as in production) and returns its connection string.
+func Mongo(t *testing.T) string {
+	t.Helper()
+	ctx := context.Background()
+	c, err := tcmongo.Run(ctx, "mongo:8.0", tcmongo.WithReplicaSet("rs0"))
+	testcontainers.CleanupContainer(t, c)
+	if err != nil {
+		t.Fatalf("start mongo: %v", err)
+	}
+	uri, err := c.ConnectionString(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return uri
 }

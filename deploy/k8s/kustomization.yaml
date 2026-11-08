@@ -10,6 +10,7 @@ resources:
   - api.yaml
   - ingest.yaml
   - archiver.yaml
+  - incidents.yaml
 
 labels:
   - pairs:
@@ -24,4 +25,6 @@ images:
   - name: coldchain/ingest
     newTag: latest
   - name: coldchain/archiver
+    newTag: latest
+  - name: coldchain/incidents
     newTag: latest

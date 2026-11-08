@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coldchain-incidents
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: coldchain-incidents }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: coldchain-incidents }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: incidents
+          image: coldchain/incidents
+          ports:
+            - { name: metrics, containerPort: 9090 }
+          envFrom:
+            - configMapRef: { name: coldchain-config }
+            - secretRef: { name: coldchain-secrets }
+          env:
+            - { name: KAFKA_CONSUMER_GROUP, value: reefer-incidents }
+          livenessProbe:
+            httpGet: { path: /healthz, port: metrics }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }

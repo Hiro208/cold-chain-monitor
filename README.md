@@ -7,7 +7,8 @@ Developed with assistance from Claude Code.
 Backend for tracking refrigerated shipping containers ("reefers"). It ingests
 temperature telemetry through Kafka, stores history in PostgreSQL, keeps the
 latest state of every unit in Redis, flags temperature breaches within
-seconds, and serves everything over a REST API. Breach alerts are routed by
+seconds, projects every breach into a MongoDB incident log, and serves
+everything over a REST API. Breach alerts are routed by
 AWS Lambda to operators (SNS) and to partners (signed webhooks behind API
 Gateway), and raw readings are archived to S3.
 
@@ -19,11 +20,13 @@ flowchart LR
     ingest -->|latest state, Lua CAS| redis[(Redis)]
     ingest -->|reefer.breaches.v1| kafka
     kafka --> archiver[archiver] -->|gzip NDJSON| s3[(S3)]
+    kafka --> incidents[incidents] -->|idempotent bulk upsert| mongo[(MongoDB)]
     kafka -->|MSK trigger| lambda[breach-alert Lambda]
     lambda --> sns[SNS → ops]
     lambda -->|HMAC-signed| partners[partner webhooks]
     api[REST API<br/>EKS, HPA on CPU] --> pg
     api --> redis
+    api --> mongo
     clients[dashboards] --> api
     partnerclients[partners] -->|API key + usage plan| apigw[API Gateway] -->|VPC link| api
 ```
@@ -35,6 +38,7 @@ flowchart LR
 | `cmd/api` | REST API: container registry, temperature history, live state, breaches, partner webhook subscriptions |
 | `cmd/ingest` | Kafka consumer group: validates readings, batch-writes Postgres, updates Redis, detects breaches, publishes breach events |
 | `cmd/archiver` | Separate consumer group copying raw readings to S3 (Hive-partitioned, gzip NDJSON) |
+| `cmd/incidents` | Consumer group on the breaches topic projecting one MongoDB document per breach (indexes, TTL, aggregation summaries) |
 | `cmd/simulator` | Registers N simulated containers and streams realistic telemetry with injected faults |
 | `lambda/breachalert` | MSK-triggered Lambda: SNS alert + webhook fan-out |
 | `internal/domain` | Pure business rules: ISO 6346 IDs, breach state machine with hysteresis |
@@ -52,6 +56,9 @@ flowchart LR
 | `GET /v1/containers/{id}/state` | Latest reading and breach state from Redis, with `stale` flag |
 | `GET /v1/containers/{id}/breaches` | Breach periods for one container |
 | `GET /v1/breaches?open=true&since=` | Breaches across the fleet, newest first |
+| `GET /v1/incidents?container=&owner=&status=&since=&cursor=` | Incident documents from MongoDB with their open/close timeline (keyset pagination on `started_at, _id`) |
+| `GET /v1/incidents/{breach_id}` | One incident |
+| `GET /v1/incidents/summary?by=owner\|commodity\|container_id\|kind&since=` | Aggregation pipeline: incident count, open count, average / total breach duration, peak temperatures per group |
 | `POST/GET/DELETE /v1/webhooks` | Partner webhook subscriptions (via API Gateway; requires `X-Partner-Id`) |
 | `GET /healthz`, `GET /readyz` | Liveness / readiness (checks Postgres and Redis) |
 
@@ -97,6 +104,21 @@ revoked partitions is dropped and recovered from Redis by the next owner.
 unknown-container readings go to `reefer.readings.dlq.v1` with a
 `reject-reason` header.
 
+**MongoDB incident log.** Postgres stays the system of record; the
+`incidents` service projects `reefer.breaches.v1` into a document-per-breach
+collection (`_id` = breach ID) that embeds owner, commodity and the
+open/close timeline, so the operations console lists and aggregates
+incidents without joins. Each batch is one unordered `BulkWrite` of upserts
+with majority write concern, and offsets are committed only afterwards.
+Updates are idempotent and order-independent: identity fields go in
+`$setOnInsert`, transitions are merged with `$min` (a re-published event
+keeps the first detection), and only a close event sets `status`, so a
+replayed "opened" can never reopen a closed incident. Compound indexes back
+each list query, a TTL index on `expire_at` drops closed incidents after
+`INCIDENT_RETENTION` (open ones never expire), and `/v1/incidents/summary`
+runs a `$match → $group → $sort` aggregation. The endpoints are enabled only
+when `MONGODB_URI` is set, and a MongoDB outage does not fail `/readyz`.
+
 **Webhook security.** Partners are identified by their API Gateway API key
 (injected as `X-Partner-Id`, not client-controlled), may only subscribe to
 owners they hold a grant for, and receive HMAC-SHA256 signatures over
@@ -114,7 +136,7 @@ gives the cluster autoscaler room to add nodes.
 Requires Go 1.26 and Docker.
 
 ```bash
-make up        # Postgres, Redis, Kafka, S3 mock, Prometheus + all services
+make up        # Postgres, Redis, Kafka, MongoDB, S3 mock, Prometheus + all services
 make logs      # follow ingest and api
 ```
 
@@ -123,6 +145,7 @@ container every 5 s (400 msg/s). Try:
 
 ```bash
 curl -s "localhost:8080/v1/breaches?open=true" | jq '.items | length'
+curl -s "localhost:8080/v1/incidents/summary?by=commodity" | jq .groups
 ```
 
 Prometheus is on <http://localhost:9091>; p99 detection latency:
@@ -135,12 +158,12 @@ histogram_quantile(0.99, sum by (le) (rate(coldchain_ingest_breach_detection_lat
 
 ```bash
 make test              # unit tests (race detector); no external deps
-make test-integration  # real Postgres/Redis/Kafka via testcontainers (Docker)
+make test-integration  # real Postgres/Redis/Kafka/MongoDB via testcontainers (Docker)
 make lint
 ```
 
 CI (`.github/workflows/ci.yml`) runs lint, unit tests, the integration suite
-against Kafka and Postgres containers, Terraform validation and image builds;
+against Kafka, Postgres and MongoDB containers, Terraform validation and image builds;
 branch protection requires all of them before merging.
 
 ## Deploying to AWS
@@ -169,4 +192,6 @@ All services are configured through environment variables; see
 | `BREACH_HYSTERESIS_C` | `0.5` | ingest |
 | `WEBHOOK_SECRET_KEY` | – (webhooks disabled if unset) | api, Lambda |
 | `ARCHIVE_BUCKET` | – (required) | archiver |
+| `MONGODB_URI` | – (required by incidents; incident API disabled if unset) | incidents, api |
+| `MONGODB_DATABASE` / `INCIDENT_RETENTION` | `coldchain` / `2160h` (90 days; `0` keeps forever) | incidents, api |
 | `SIM_CONTAINERS` / `SIM_INTERVAL` | `2000` / `5s` | simulator |
