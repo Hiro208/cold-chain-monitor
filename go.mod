@@ -21,7 +21,7 @@ require (
 	github.com/twmb/franz-go v1.22.2
 	github.com/twmb/franz-go/pkg/kadm v1.19.0
 	github.com/twmb/franz-go/pkg/kmsg v1.15.0
-	golang.org/x/sync v0.23.0
+	golang.org/x/sync v0.25.0
 )
 
 require (
